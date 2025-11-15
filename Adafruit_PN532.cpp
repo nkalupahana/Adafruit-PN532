@@ -785,9 +785,9 @@ bool Adafruit_PN532::inListPassiveTarget() {
       if (pn532_packetbuffer[7] != 1) {
 #ifdef PN532DEBUG
         PN532DEBUGPRINT.println(F("Unhandled number of targets inlisted"));
-#endif
         PN532DEBUGPRINT.println(F("Number of tags inlisted:"));
         PN532DEBUGPRINT.println(pn532_packetbuffer[7]);
+#endif
         return false;
       }
 
