@@ -68,14 +68,14 @@ byte pn532response_firmwarevers[] = {
 // Uncomment these lines to enable debug output for PN532(SPI) and/or MIFARE
 // related code
 
-// #define PN532DEBUG
+#define PN532DEBUG
 // #define MIFAREDEBUG
 
 // If using Native Port on Arduino Zero or Due define as SerialUSB
 #define PN532DEBUGPRINT Serial ///< Fixed name for debug Serial instance
 // #define PN532DEBUGPRINT SerialUSB ///< Fixed name for debug Serial instance
 
-#define PN532_PACKBUFFSIZ 265               ///< Packet buffer size in bytes
+#define PN532_PACKBUFFSIZ 300               ///< Packet buffer size in bytes
 byte pn532_packetbuffer[PN532_PACKBUFFSIZ]; ///< Packet buffer used in various
                                             ///< transactions
 
@@ -1615,11 +1615,13 @@ void Adafruit_PN532::readdata(uint8_t *buff, uint16_t n) {
   if (spi_dev) {
     // SPI read
     uint8_t cmd = PN532_SPI_DATAREAD;
+    uint16_t originalN = n;
     while (n > 0) {
       spi_dev->write_then_read(&cmd, 1, buff, n & 0xFF);
       buff += (n & 0xFF);
       n -= (n & 0xFF);
     }
+    buff -= originalN;
   } else if (i2c_dev) {
     // I2C read
     uint8_t rbuff[n + 1]; // +1 for leading RDY byte
