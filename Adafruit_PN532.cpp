@@ -75,7 +75,7 @@ byte pn532response_firmwarevers[] = {
 #define PN532DEBUGPRINT Serial ///< Fixed name for debug Serial instance
 // #define PN532DEBUGPRINT SerialUSB ///< Fixed name for debug Serial instance
 
-#define PN532_PACKBUFFSIZ 255               ///< Packet buffer size in bytes
+#define PN532_PACKBUFFSIZ 265               ///< Packet buffer size in bytes
 byte pn532_packetbuffer[PN532_PACKBUFFSIZ]; ///< Packet buffer used in various
                                             ///< transactions
 
@@ -666,14 +666,14 @@ bool Adafruit_PN532::readDetectedPassiveTargetID(uint8_t *uid,
 /**************************************************************************/
 bool Adafruit_PN532::inDataExchange(uint8_t *send, uint8_t sendLength,
                                     uint8_t *response,
-                                    uint8_t *responseLength) {
+                                    uint16_t *responseLength) {
   if (sendLength > PN532_PACKBUFFSIZ - 2) {
 #ifdef PN532DEBUG
     PN532DEBUGPRINT.println(F("APDU length too long for packet buffer"));
 #endif
     return false;
   }
-  uint8_t i;
+  uint16_t i;
 
   pn532_packetbuffer[0] = 0x40; // PN532_COMMAND_INDATAEXCHANGE;
   pn532_packetbuffer[1] = _inListedTag;
@@ -699,8 +699,21 @@ bool Adafruit_PN532::inDataExchange(uint8_t *send, uint8_t sendLength,
 
   if (pn532_packetbuffer[0] == 0 && pn532_packetbuffer[1] == 0 &&
       pn532_packetbuffer[2] == 0xff) {
-    uint8_t length = pn532_packetbuffer[3];
-    if (pn532_packetbuffer[4] != (uint8_t)(~length + 1)) {
+        uint16_t length;
+    uint8_t checksumOffset;
+    uint8_t lengthChecksum;
+    if (pn532_packetbuffer[3] == PN532_EXTENDED_FRAME_FIXED_VALUE && pn532_packetbuffer[4] == PN532_EXTENDED_FRAME_FIXED_VALUE) {
+      //It's an extended frame
+      length = (((uint16_t) pn532_packetbuffer[5]) << 8) | pn532_packetbuffer[6];
+      lengthChecksum = (uint8_t)(~(pn532_packetbuffer[5]+pn532_packetbuffer[6])+1);
+      checksumOffset = 3; //length is encoded in three more bytes (two fixed values 0xFF and an additional octet for the length itself)
+    } else {
+      length = pn532_packetbuffer[3];
+      lengthChecksum = (uint8_t)(~length+1);
+      checksumOffset = 0;
+    }
+    
+    if (pn532_packetbuffer[checksumOffset+4]!=lengthChecksum) {
 #ifdef PN532DEBUG
       PN532DEBUGPRINT.println(F("Length check invalid"));
       PN532DEBUGPRINT.println(length, HEX);
@@ -708,9 +721,8 @@ bool Adafruit_PN532::inDataExchange(uint8_t *send, uint8_t sendLength,
 #endif
       return false;
     }
-    if (pn532_packetbuffer[5] == PN532_PN532TOHOST &&
-        pn532_packetbuffer[6] == PN532_RESPONSE_INDATAEXCHANGE) {
-      if ((pn532_packetbuffer[7] & 0x3f) != 0) {
+    if (pn532_packetbuffer[checksumOffset+5]==PN532_PN532TOHOST && pn532_packetbuffer[checksumOffset+6]==PN532_RESPONSE_INDATAEXCHANGE) {
+      if ((pn532_packetbuffer[checksumOffset+7] & 0x3f)!=0) {
 #ifdef PN532DEBUG
         PN532DEBUGPRINT.println(F("Status code indicates an error"));
 #endif
@@ -724,7 +736,7 @@ bool Adafruit_PN532::inDataExchange(uint8_t *send, uint8_t sendLength,
       }
 
       for (i = 0; i < length; ++i) {
-        response[i] = pn532_packetbuffer[8 + i];
+        response[i] = pn532_packetbuffer[checksumOffset + 8 + i];
       }
       *responseLength = length;
 
@@ -1599,16 +1611,20 @@ bool Adafruit_PN532::waitready(uint16_t timeout) {
     @param  n         Number of bytes to be read
 */
 /**************************************************************************/
-void Adafruit_PN532::readdata(uint8_t *buff, uint8_t n) {
+void Adafruit_PN532::readdata(uint8_t *buff, uint16_t n) {
   if (spi_dev) {
     // SPI read
     uint8_t cmd = PN532_SPI_DATAREAD;
-    spi_dev->write_then_read(&cmd, 1, buff, n);
+    while (n > 0) {
+      spi_dev->write_then_read(&cmd, 1, buff, n & 0xFF);
+      buff += (n & 0xFF);
+      n -= (n & 0xFF);
+    }
   } else if (i2c_dev) {
     // I2C read
     uint8_t rbuff[n + 1]; // +1 for leading RDY byte
     i2c_dev->read(rbuff, n + 1);
-    for (uint8_t i = 0; i < n; i++) {
+    for (uint16_t i = 0; i < n; i++) {
       buff[i] = rbuff[i + 1];
     }
   } else if (ser_dev) {
@@ -1617,7 +1633,7 @@ void Adafruit_PN532::readdata(uint8_t *buff, uint8_t n) {
   }
 #ifdef PN532DEBUG
   PN532DEBUGPRINT.print(F("Reading: "));
-  for (uint8_t i = 0; i < n; i++) {
+  for (uint16_t i = 0; i < n; i++) {
     PN532DEBUGPRINT.print(F(" 0x"));
     PN532DEBUGPRINT.print(buff[i], HEX);
   }
