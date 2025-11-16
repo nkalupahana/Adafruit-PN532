@@ -68,8 +68,8 @@ byte pn532response_firmwarevers[] = {
 // Uncomment these lines to enable debug output for PN532(SPI) and/or MIFARE
 // related code
 
-// #define PN532DEBUG
-// #define MIFAREDEBUG
+#define PN532DEBUG
+#define MIFAREDEBUG
 
 // If using Native Port on Arduino Zero or Due define as SerialUSB
 #define PN532DEBUGPRINT Serial ///< Fixed name for debug Serial instance
